@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
-	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"name": "obsidian-http-publish-plugin",
+	"version": "0.1.0",
+	"description": "Obsidian plugin to publish a note to a HTTP endpoint",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
