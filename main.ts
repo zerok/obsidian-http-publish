@@ -1,4 +1,4 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, MarkdownFileInfo, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, Workspace, requestUrl } from 'obsidian';
 
 class DestinationSettings {
 	name?: string;
@@ -25,14 +25,60 @@ export default class HTTPPublishPlugin extends Plugin {
 		this.addCommand({
 			id: 'http-publish',
 			name: 'HTTP Publish',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
+			editorCallback: async (editor: Editor, view: MarkdownView) => {
+				const mdFile = this.app.workspace.activeEditor;
+				if (!mdFile) {
+					alert('No file active');
+					return;
+				}
+				if (this.settings.destinations.length < 1) {
+					alert('Please set up a destination first in the settings.')
+					return;
+				}
+				// If there's more one destination defined, then the user needs
+				// to pick the preferred one from a modal:
+				if (this.settings.destinations.length > 1) {
+					new DestinationPicker(this.app, this, mdFile).open();
+					return;
+				}
+				try {
+					const response = await this.publishFile(this.settings.destinations[0].name!, mdFile);
+					await this.updateFileFromResponse(mdFile, response);
+				} catch (e) {
+					new Notice("Failed to send data to destination");
+					console.log(e);
+				}
 			}
 		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new SettingTab(this.app, this));
+	}
+
+	async updateFileFromResponse(file: MarkdownFileInfo, serverInfo: any) {
+		// TODO: Update the file with metadata returned from the server
+		// (especially updating the `path` frontmatter)
+	}
+
+	async publishFile(destName: string, file: MarkdownFileInfo) {
+		console.log(`Publishing ${file.file?.path} to ${destName}`);
+		const dest = this.settings.destinations.filter(dest => dest.name === destName).first();
+		if (!dest) {
+			throw new Error('No destination available');
+		}
+		const fileContent = await this.app.vault.cachedRead(file.file!);
+		const headers: Record<string, string> = {
+			'Content-Type': 'text/markdown',
+		};
+		if (dest.authHeaderName) {
+			headers[dest.authHeaderName!] = dest.authHeaderValue || '';
+		}
+		return requestUrl({
+			url: dest.url!,
+			method: 'POST',
+			body: fileContent,
+			headers: headers,
+		}).json;
 	}
 
 	onunload() {
@@ -45,6 +91,47 @@ export default class HTTPPublishPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+}
+
+class DestinationPicker extends Modal {
+	plugin: HTTPPublishPlugin
+	file: MarkdownFileInfo
+
+	constructor(app: App, plugin: HTTPPublishPlugin, mdFile: MarkdownFileInfo) {
+		super(app);
+		this.plugin = plugin;
+		this.file = mdFile;
+	}
+
+	onOpen(): void {
+		const {contentEl} = this;
+		let pickedDestination: string|null = null;
+
+		new Setting(contentEl).setHeading().setName('Pick a destination');
+		new Setting(contentEl).setName('Destination').addDropdown((dropDown) => {
+			for (const dest of this.plugin.settings.destinations) {
+				dropDown.addOption(dest.name!, dest.name!);
+			}
+			pickedDestination = dropDown.getValue();
+			dropDown.onChange((val) => {
+				pickedDestination = val;
+			})
+		});
+		new Setting(contentEl).addButton(button => {
+			button.setButtonText('Send').onClick(async () => {
+				if (!pickedDestination) {
+					return;
+				}
+				try {
+					const response = await this.plugin.publishFile(pickedDestination, this.file);
+					await this.plugin.updateFileFromResponse(this.file, response);
+				} catch (e) {
+					this.close();
+					new Notice("Failed to send data to destination");
+				}
+			});
+		});
 	}
 }
 
