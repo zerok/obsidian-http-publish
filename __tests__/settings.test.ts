@@ -2,7 +2,7 @@ import { DestinationSettings } from "../src/settings";
 
 describe('Destination settings', () => {
     test('Default settings are invalid', () => {
-        let sut = new DestinationSettings();
+        const sut = new DestinationSettings();
         expect(() => {
             sut.validate();
         }).toThrow();
