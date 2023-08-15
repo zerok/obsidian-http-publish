@@ -1,19 +1,5 @@
-import { App, Editor, MarkdownFileInfo, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, Workspace, requestUrl } from 'obsidian';
-
-class DestinationSettings {
-	name?: string;
-	url?: string;
-	authHeaderName?: string;
-	authHeaderValue?: string;
-}
-
-interface HTTPPublishPluginSettings {
-	destinations: DestinationSettings[];
-}
-
-const DEFAULT_SETTINGS: HTTPPublishPluginSettings = {
-	destinations: []
-}
+import { App, Editor, MarkdownFileInfo, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, requestUrl } from 'obsidian';
+import { DEFAULT_SETTINGS, DestinationSettings, HTTPPublishPluginSettings } from 'src/settings';
 
 export default class HTTPPublishPlugin extends Plugin {
 	settings: HTTPPublishPluginSettings;
@@ -45,7 +31,7 @@ export default class HTTPPublishPlugin extends Plugin {
 					const response = await this.publishFile(this.settings.destinations[0].name!, mdFile);
 					await this.updateFileFromResponse(mdFile, response);
 				} catch (e) {
-					new Notice("Failed to send data to destination");
+					new Notice('Failed to send note to destination');
 					console.log(e);
 				}
 			}
@@ -58,6 +44,7 @@ export default class HTTPPublishPlugin extends Plugin {
 	async updateFileFromResponse(file: MarkdownFileInfo, serverInfo: any) {
 		// TODO: Update the file with metadata returned from the server
 		// (especially updating the `path` frontmatter)
+		new Notice("Note successfully published");
 	}
 
 	async publishFile(destName: string, file: MarkdownFileInfo) {
@@ -128,7 +115,7 @@ class DestinationPicker extends Modal {
 					await this.plugin.updateFileFromResponse(this.file, response);
 				} catch (e) {
 					this.close();
-					new Notice("Failed to send data to destination");
+					new Notice('Failed to send data to destination');
 				}
 			});
 		});
@@ -142,7 +129,7 @@ class SettingTab extends PluginSettingTab {
 	constructor(app: App, plugin: HTTPPublishPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
-		this.newDestination = {};
+		this.newDestination = new DestinationSettings();
 	}
 
 	display(): void {
@@ -181,40 +168,40 @@ class SettingTab extends PluginSettingTab {
 			.setName("Name")
 			.addText(comp => {
 				comp.setPlaceholder("default").onChange((v) => {
-					this.newDestination.name = v;
+					this.newDestination = new DestinationSettings(v, this.newDestination.url, this.newDestination.authHeaderName, this.newDestination.authHeaderValue);
 				}).setValue(this.newDestination.name || '');
 			});
 		new Setting(containerEl)
 			.setName("URL")
 			.addText(comp => {
 				comp.setPlaceholder("https://example.org").onChange((v) => {
-					this.newDestination.url = v;
+					this.newDestination = new DestinationSettings(this.newDestination.name, v, this.newDestination.authHeaderName, this.newDestination.authHeaderValue);
 				}).setValue(this.newDestination.url || '');
 			});
 		new Setting(containerEl)
 			.setName("Authorization header name")
 			.addText(comp => {
 				comp.setPlaceholder("Authorization").onChange((v) => {
-					this.newDestination.authHeaderName = v;
+					this.newDestination = new DestinationSettings(this.newDestination.name, this.newDestination.url, v, this.newDestination.authHeaderValue);
 				}).setValue(this.newDestination.authHeaderName || '');
 			});
 		new Setting(containerEl)
 			.setName("Authorization header value")
 			.addText(comp => {
 				comp.setPlaceholder("Bearer 12345").onChange((v) => {
-					this.newDestination.authHeaderValue = v;
+					this.newDestination = new DestinationSettings(this.newDestination.name, this.newDestination.url, this.newDestination.authHeaderName, v);
 				}).setValue(this.newDestination.authHeaderValue || '');
 			});
 		new Setting(containerEl).addButton(button => {
 			button.setButtonText("Add destination").onClick(async (evt) => {
-				// TODO: Validate those settings
-				this.plugin.settings.destinations.push({
-					name: this.newDestination.name,
-					url: this.newDestination.url,
-					authHeaderName: this.newDestination.authHeaderName,
-					authHeaderValue: this.newDestination.authHeaderValue
-				});
-				this.newDestination = {};
+				try {
+					this.newDestination.validate();
+				} catch(e) {
+					new Notice(e.message);
+					return;
+				}
+				this.plugin.settings.destinations.push(this.newDestination);
+				this.newDestination = new DestinationSettings();
 				await this.plugin.saveSettings();
 				this.display();
 			});
