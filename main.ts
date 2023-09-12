@@ -1,6 +1,10 @@
 import { App, Editor, MarkdownFileInfo, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, requestUrl } from 'obsidian';
 import { DEFAULT_SETTINGS, DestinationSettings, HTTPPublishPluginSettings } from 'src/settings';
 
+interface ServerPublishResponse {
+	path: string,
+}
+
 export default class HTTPPublishPlugin extends Plugin {
 	settings: HTTPPublishPluginSettings;
 
@@ -41,9 +45,15 @@ export default class HTTPPublishPlugin extends Plugin {
 		this.addSettingTab(new SettingTab(this.app, this));
 	}
 
-	async updateFileFromResponse(file: MarkdownFileInfo, serverInfo: any) {
-		// TODO: Update the file with metadata returned from the server
-		// (especially updating the `path` frontmatter)
+	async updateFileFromResponse(file: MarkdownFileInfo, serverInfo: ServerPublishResponse) {
+		const editor = this.app.workspace.activeEditor?.editor!;
+		// TODO: Check if there is a metadata field aleady for the path
+		// We know that the first line starts the frontmatter.
+		editor.replaceRange(`path: ${serverInfo.path}\n`, {
+			ch: 0, line: 1,
+		}, {
+			ch: 0, line: 1,
+		});
 		new Notice("Note successfully published");
 	}
 
